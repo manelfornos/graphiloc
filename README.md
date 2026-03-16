@@ -39,6 +39,17 @@ The framework supports preprocessing of the original datasets using linear and p
 
 **The graphs were generated from the TUT5 dataset.*
 
+## Pipeline
+
+<table>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="images/pipeline.png" width="600">
+    </td>
+  </tr>
+</table>
+
+
 ## Summary of results
 
 Results obtained after 10 runs using a random split of the training dataset each time (80/20).
