@@ -430,7 +430,7 @@ class GNNClassificationTrainer:
         
 
 def summarize_predictions(predictions, graph_params, model_params, 
-                          task=TASKS_REG, save_path=None):
+                          task=TASKS_REG, output_csv=None):
     
     if task == TASKS_REG:
         metrics = ['mpe', 'mae', 'mae_x', 'mae_y', 'elapsed_time']
@@ -456,10 +456,10 @@ def summarize_predictions(predictions, graph_params, model_params,
 
     if save_path is not None:
         try:
-            with open(save_path, 'x') as f:
+            with open(output_csv, 'x') as f:
                 pd.DataFrame([summary_data]).to_csv(f, index=False)
         except FileExistsError:
-           pd.DataFrame([ summary_data]).to_csv(save_path, mode='a', header=False, index=False)
+           pd.DataFrame([ summary_data]).to_csv(output_csv, mode='a', header=False, index=False)
 
     return summary_df
 
@@ -468,7 +468,10 @@ def get_num_features(data, scheme):
     return (data.cls['train'] if scheme == 'inductive' else data.cls).num_features
 
 def get_num_classes(data, scheme):
-    return (data.cls['train'] if scheme == 'inductive' else data.cls).num_classes
+    if task == 'classification':
+        return (data.cls['train'] if scheme == 'inductive' else data.cls).num_classes
+    else:
+        return 2
 
 def print_cls_epoch_summary(epoch, train_loss, train_accuracy, 
                             validation_loss, validation_accuracy):
