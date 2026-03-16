@@ -298,8 +298,8 @@ class IndoorLocGraphData:
                 X, 
                 n_neighbors=k, 
                 metric=metric,
-                mode='connectivity',
-                include_self=False
+                mode='distance',
+                include_self=True
             )
             
             knn_graph_coo = knn_graph.tocoo()
