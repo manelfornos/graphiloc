@@ -454,7 +454,7 @@ def summarize_predictions(predictions, graph_params, model_params,
     summary_data['graph_params'] = str(graph_params)
     summary_data['model_params'] = str(model_params)
 
-    if save_path is not None:
+    if output_csv is not None:
         try:
             with open(output_csv, 'x') as f:
                 pd.DataFrame([summary_data]).to_csv(f, index=False)
@@ -467,7 +467,7 @@ def summarize_predictions(predictions, graph_params, model_params,
 def get_num_features(data, scheme):
     return (data.cls['train'] if scheme == 'inductive' else data.cls).num_features
 
-def get_num_classes(data, scheme):
+def get_num_classes(data, scheme, task):
     if task == 'classification':
         return (data.cls['train'] if scheme == 'inductive' else data.cls).num_classes
     else:
