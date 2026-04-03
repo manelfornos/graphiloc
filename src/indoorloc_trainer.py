@@ -90,77 +90,66 @@ class GNNRegressionTrainer:
             count += 1
             return count, best_loss
     
-    def _train(
-        self, 
-        data: torch_geometric.data.Data, 
-        model: torch.nn.Module
-    ) -> torch.Tensor:
+    def _train(self, data, model):
         model.train()
         model.optimizer.zero_grad()
-        
+
         if hasattr(data, 'train_mask'):
             outputs = model(data)
             mask = data.train_mask
-            loss = model.criterion(outputs[mask], data.y[mask])
+            out_np = data.y_scaler.inverse_transform(outputs[mask].detach().cpu().numpy())
+            tgt_np = data.y_scaler.inverse_transform(data.y[mask].cpu().numpy())
         else:
             outputs = model(data['train'])
-            loss = model.criterion(outputs, data['train'].y)
+            out_np = data['train'].y_scaler.inverse_transform(outputs.detach().cpu().numpy())
+            tgt_np = data['train'].y_scaler.inverse_transform(data['train'].y.cpu().numpy())
+
+        if hasattr(data, 'train_mask'):
+            loss_normalized = model.criterion(outputs[mask], data.y[mask])
+        else:
+            loss_normalized = model.criterion(outputs, data['train'].y)
         
-        loss.backward()
+        loss_normalized.backward()
         model.optimizer.step()
-        
+        loss = model.criterion(
+            torch.tensor(out_np, dtype=torch.float32).to(self.device),
+            torch.tensor(tgt_np, dtype=torch.float32).to(self.device)
+        )
         return loss
 
     @torch.no_grad()
-    def _validate(
-        self, 
-        data: torch_geometric.data.Data, 
-        model: torch.nn.Module
-    ) -> float:
+    def _validate(self, data, model):
         model.eval()
-        
+
         if hasattr(data, 'val_mask'):
             outputs = model(data)
             mask = data.val_mask
-            outputs_rescaled = torch.tensor(
-                data.y_scaler.inverse_transform(outputs[mask].cpu().numpy())
-            )
-            targets_rescaled = torch.tensor(
-                data.y_scaler.inverse_transform(data.y[mask].cpu().numpy())
-            )
+            out_np = data.y_scaler.inverse_transform(outputs[mask].cpu().numpy())
+            tgt_np = data.y_scaler.inverse_transform(data.y[mask].cpu().numpy())
         else:
             outputs = model(data['val']).to(self.device)
-            outputs_rescaled = torch.tensor(
-                data['val'].y_scaler.inverse_transform(outputs.cpu().numpy())
-            )
-            targets_rescaled = torch.tensor(
-                data['val'].y_scaler.inverse_transform(data['val'].y.cpu().numpy())
-            )
-        
-        mae = model.criterion(outputs_rescaled, targets_rescaled)
-        
-        return mae
+            out_np = data['val'].y_scaler.inverse_transform(outputs.cpu().numpy())
+            tgt_np = data['val'].y_scaler.inverse_transform(data['val'].y.cpu().numpy())
 
-    def train_validate(
-        self, 
-        data: torch_geometric.data.Data, 
-        model: torch.nn.Module, 
-        max_epochs: int, 
-        patience: int, 
-        verbose: int,
-        show_train_process: bool = False,
-        trial = None
-    ) -> None:
+        loss = model.criterion(
+            torch.tensor(out_np, dtype=torch.float32).to(self.device),
+            torch.tensor(tgt_np, dtype=torch.float32).to(self.device)
+        )
+        return loss
+
+    def train_validate(self, data, model, max_epochs, patience, verbose, 
+                   show_train_process=False, trial=None):
+    
         metrics = {SUBSETS_TRAIN: {METRICS_LOSS: []},
-                   SUBSETS_VAL: {METRICS_LOSS: []}}
+                SUBSETS_VAL: {METRICS_LOSS: []}}
 
-        best_validation_loss = 0
+        best_validation_loss = float('inf')
         nonimprovement_count = 0
-        model.to(self.device)
+        model = model.to(self.device)
 
         for epoch in range(1, max_epochs + 1):
             train_loss = self._train(data, model)
-            validation_loss  = self._validate(data, model)
+            validation_loss = self._validate(data, model)
             model.scheduler.step(validation_loss)
 
             metrics[SUBSETS_TRAIN][METRICS_LOSS].append(train_loss.item())
@@ -170,33 +159,31 @@ class GNNRegressionTrainer:
                 trial.report(validation_loss.item(), epoch)
                 if trial.should_prune():
                     raise optuna.TrialPruned()
-            
-            if epoch == 1:
+
+            if validation_loss.item() < best_validation_loss:
                 best_validation_loss = validation_loss.item()
+                nonimprovement_count = 0
+            else:
+                nonimprovement_count += 1
 
             if show_train_process and (epoch == 1 or epoch % 100 == 0):
                 print_reg_epoch_summary(epoch, train_loss, validation_loss)
 
-            nonimprovement_count, \
-                best_validation_loss = self._update_nonimprovement_count(
-                    nonimprovement_count, best_validation_loss, validation_loss.item()
-            )
-
             if nonimprovement_count > patience:
                 if verbose > 3:
-                    print_early_stopping(epoch)                
-        
-                if show_train_process: 
+                    print_early_stopping(epoch)
+
+                if show_train_process:
                     trainingviz = ilviz.TrainingVisualizer()
                     trainingviz.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
-        
-                return validation_loss.item()
+
+                return best_validation_loss
 
         if show_train_process:
-                    trainingviz = ilviz.TrainingVisualizer()
-                    trainingviz.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
+            trainingviz = ilviz.TrainingVisualizer()
+            trainingviz.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
 
-        return validation_loss.item()
+        return best_validation_loss
 
     @torch.no_grad()
     def test(
@@ -462,7 +449,6 @@ def summarize_predictions(predictions, graph_params, model_params,
            pd.DataFrame([ summary_data]).to_csv(output_csv, mode='a', header=False, index=False)
 
     return summary_df
-
 
 def get_num_features(data, scheme):
     return (data.cls['train'] if scheme == 'inductive' else data.cls).num_features
