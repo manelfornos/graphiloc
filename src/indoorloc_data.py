@@ -249,10 +249,7 @@ class IndoorLocGraphData:
                 DEVICES_CUDA if torch.cuda.is_available() else DEVICES_CPU
             )
     
-    def _assign_nodeid(
-        self, 
-        data: IndoorLocDataset
-    ) -> IndoorLocDataset:
+    def _assign_nodeid(self, data):
         """Assigns unique node IDs to each sample"""
 
         data_copy = copy.deepcopy(data)
@@ -266,66 +263,41 @@ class IndoorLocGraphData:
             for attr in attributes:
                 df = getattr(getattr(data_copy, subset), attr)
                 df = df.reset_index(drop=True)
-
                 if subset == SUBSETS_TRAIN:
                     df[nodeid] = df.index
                 else:  
                     df[nodeid] = df.index + train_len
-                
                 setattr(getattr(data_copy, subset), attr, df)
 
         return data_copy
         
-    def _create_tensor_mask(
-        self, 
-        data: pd.DataFrame, 
-        tensor_dim: int
-    ) -> torch.Tensor:
+    def _create_tensor_mask(self, data, tensor_dim):
         """Creates a boolean mask tensor from node IDs."""
 
         mask = torch.zeros(tensor_dim, dtype=torch.bool)
         mask[data["nodeid"].values] = True
-
         return mask
 
     def _build_knn_graph(self, graph_data, k, metric='euclidean'):
         """Constructs a K-Nearest Neighbors graph."""
-
         if k is not None and k > 0:
             X = graph_data.x.cpu().numpy()
-            
-            knn_graph = kneighbors_graph(
-                X, 
-                n_neighbors=k, 
-                metric=metric,
-                mode='distance',
-                include_self=True
-            )
-            
+            knn_graph = kneighbors_graph(X, n_neighbors=k, metric=metric, mode='distance', include_self=True)
             knn_graph_coo = knn_graph.tocoo()
             edge_index = torch.from_numpy(
                 np.stack([knn_graph_coo.row, knn_graph_coo.col])
             ).long().to(self.device)
-            
             edge_index = to_undirected(edge_index)
-
             graph_data.edge_index = edge_index.to(self.device)
             graph_data.k = k
-    
         return graph_data
     
-    def create_nodes(
-        self, 
-        graph_data,
-        dataset: IndoorLocDataset, 
-        val_size: float = 0.1,
-        n_split: int = 0
-    ) -> Data:
+    def create_nodes(self, graph_data, dataset, val_size=0.1, n_split=0):
         """Creates node features."""
 
         dataset = self._assign_nodeid(dataset)
-        
-        X_train, X_val, _, _ = train_test_split(
+
+        X_train, X_val, y_train, y_val = train_test_split(
             dataset.train.x, dataset.train.y, test_size=val_size, random_state=SEED + n_split
         )
 
@@ -337,12 +309,11 @@ class IndoorLocGraphData:
 
         graph_data.val_size = val_size
 
-        x_concat = pd.concat([dataset.train.x, dataset.test.x])
+        x_concat = pd.concat([dataset.train.x, dataset.test.x]).sort_values("nodeid")   
         graph_data.x = torch.tensor(x_concat[dataset.features].values, dtype=torch.float)
-
         graph_data.num_features = len(dataset.features)
-        
-        return graph_data.to(self.device)
+
+        return graph_data.to(self.device), y_train.reset_index(drop=True), y_val.reset_index(drop=True)
 
     def create_edges(self, graph_data, graph_params):
         """Generates graph edges based on KNN connectivity."""
@@ -350,40 +321,33 @@ class IndoorLocGraphData:
         k = graph_params.get('k', 15)
         metric = graph_params.get('metric', 'manhattan')
         self._build_knn_graph(graph_data, k, metric)
-
         return graph_data.to(self.device) 
     
     def create_node_labels(self, dataset, graph_data, task):
         """Generates node labels for classification or regression tasks."""
 
         if task == TASKS_REG:
-            train_y = dataset.train.y
-
+            # Fittea con train completo, igual que antes
             train_coords = np.column_stack((
-                train_y[TARGETS_LONGITUDE].values,
-                train_y[TARGETS_LATITUDE].values
+                dataset.train.y[TARGETS_LONGITUDE].values,
+                dataset.train.y[TARGETS_LATITUDE].values
             ))
-
             self.y_scaler.fit(train_coords)
 
             y_concat = pd.concat([dataset.train.y, dataset.test.y])
-
             all_coords = np.column_stack((
                 y_concat[TARGETS_LONGITUDE].values,
                 y_concat[TARGETS_LATITUDE].values
             ))
-
-            coords_scaled = self.y_scaler.transform(all_coords)  
-            
+            coords_scaled = self.y_scaler.transform(all_coords)
             graph_data.y = torch.tensor(coords_scaled, dtype=torch.float)
             graph_data.y_scaler = self.y_scaler
             graph_data.num_classes = 0
 
         if task == TASKS_CLS:
             y_concat = pd.concat([dataset.train.y, dataset.test.y])
-
-            graph_data.y = torch.tensor(y_concat[dataset.target].values, dtype=torch.int64)
-            graph_data.num_classes = len(y_concat[dataset.target].unique())
+            graph_data.y = torch.tensor(y_concat[TARGETS_BUILDING_FLOOR].values, dtype=torch.int64)
+            graph_data.num_classes = len(y_concat[TARGETS_BUILDING_FLOOR].unique())
 
         return graph_data.to(self.device)
 
@@ -392,7 +356,7 @@ class IndoorLocGraphData:
         tasks = [TASKS_CLS, TASKS_REG]
 
         graph_data = Data()
-        graph_data = self.create_nodes(graph_data, dataset, val_size, n_split)
+        graph_data, y_train, y_val = self.create_nodes(graph_data, dataset, val_size, n_split)
         graph_data = self.create_edges(graph_data, graph_params)
 
         for task in tasks:
@@ -406,9 +370,9 @@ class IndoorLocGraphData:
                 graph_data_loader.cls = graph_data_cls
 
             if task == TASKS_REG:
-                dataset.target = [TARGETS_LONGITUDE, TARGETS_LATITUDE] 
+                dataset.target = [TARGETS_LONGITUDE, TARGETS_LATITUDE]
                 graph_data_reg = self.create_node_labels(
-                    dataset=dataset, 
+                    dataset=dataset,
                     graph_data=copy.deepcopy(graph_data),
                     task=task,
                 )
@@ -423,10 +387,7 @@ class IndoorLocGraphData:
         dataset = self._assign_nodeid(dataset)
 
         X_train, X_val, y_train, y_val = train_test_split(
-            dataset.train.x,
-            dataset.train.y,
-            test_size=val_size,
-            random_state=SEED + n_split
+            dataset.train.x, dataset.train.y, test_size=val_size, random_state=SEED + n_split
         )
 
         splits = {
@@ -437,7 +398,6 @@ class IndoorLocGraphData:
 
         def _build_split_graph(x_df):
             x_df = x_df[dataset.features]
-
             gdata = Data()
             gdata.num_nodes = len(x_df)
             gdata.x = torch.tensor(x_df.values, dtype=torch.float)
@@ -450,52 +410,36 @@ class IndoorLocGraphData:
                     y_df[TARGETS_LONGITUDE].values,
                     y_df[TARGETS_LATITUDE].values
                 ))
-
                 if fit_scaler:
                     self.y_scaler.fit(coords)
-
                 coords = self.y_scaler.transform(coords)
                 gdata.y = torch.tensor(coords, dtype=torch.float)
                 gdata.y_scaler = self.y_scaler
                 gdata.num_classes = 0
 
             if task == TASKS_CLS:
-                gdata.y = torch.tensor(
-                    y_df[TARGETS_BUILDING_FLOOR].values,
-                    dtype=torch.int64
-                )
+                gdata.y = torch.tensor(y_df[TARGETS_BUILDING_FLOOR].values, dtype=torch.int64)
                 gdata.num_classes = len(np.unique(gdata.y.numpy()))
 
             return gdata
         
-        graphs = {
-            split: _build_split_graph(x)
-            for split, (x, _) in splits.items()
-        }
+        graphs = {split: _build_split_graph(x) for split, (x, _) in splits.items()}
 
         for task in tasks:
             if task == TASKS_CLS:
                 dataset.target = TARGETS_BUILDING_FLOOR
                 graph_data_loader.cls = {
-                    split: _assign_split_labels(
-                        copy.deepcopy(graphs[split]),
-                        y,
-                        task,
-                    )
+                    split: _assign_split_labels(copy.deepcopy(graphs[split]), y, task)
                     for split, (_, y) in splits.items()
                 }
 
             if task == TASKS_REG:
                 dataset.target = [TARGETS_LONGITUDE, TARGETS_LATITUDE]
                 graph_data_loader.reg = {
-                    split: _assign_split_labels(
-                        copy.deepcopy(graphs[split]),
-                        y,
-                        task,
-                        fit_scaler=(split == "train"),
-                    )
+                    split: _assign_split_labels(copy.deepcopy(graphs[split]), y, task, fit_scaler=(split == "train"))
                     for split, (_, y) in splits.items()
                 }
+
         graph_data_loader.reg["train"].to(self.device)
         graph_data_loader.reg["val"].to(self.device)
         graph_data_loader.reg["test"].to(self.device)
@@ -505,13 +449,7 @@ class IndoorLocGraphData:
 
         return graph_data_loader
 
-    def create_data_loader(
-        self, 
-        dataset: IndoorLocDataset, 
-        val_size: float,
-        graph_params: dict,
-        n_split: int = 0,
-    ) -> IndoorLocGraphDataLoader:
+    def create_data_loader(self, dataset, val_size, graph_params, n_split=0):
         """Generates graph data loaders for classification and regression tasks."""
 
         if graph_params["scheme"] == 'transductive':
@@ -520,6 +458,5 @@ class IndoorLocGraphData:
             graph_data_loader = self.create_inductive_graphs(dataset, val_size, graph_params, n_split)
         else:
             raise ValueError("Graph scheme must be transductive or inductive!")
-
         return graph_data_loader
     
