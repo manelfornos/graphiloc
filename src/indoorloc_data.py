@@ -327,7 +327,6 @@ class IndoorLocGraphData:
         """Generates node labels for classification or regression tasks."""
 
         if task == TASKS_REG:
-            # Fittea con train completo, igual que antes
             train_coords = np.column_stack((
                 dataset.train.y[TARGETS_LONGITUDE].values,
                 dataset.train.y[TARGETS_LATITUDE].values
