@@ -105,7 +105,7 @@ class IndoorLocPreprocessor:
         relace_missing_signals: bool = True,
         codification: bool = True,
         drop_unused_columns: bool = True,
-        normalization: str = "lineal",
+        normalization: str = "linear",
         pca_components: float = 0.9,
     ) -> Union[Train, Test]:
         
@@ -121,13 +121,13 @@ class IndoorLocPreprocessor:
             data.train.y.drop(columns=["FLOORID", "BUILDINGID"], axis=1, inplace=True)
             data.test.y.drop(columns=["FLOORID", "BUILDINGID"], axis=1, inplace=True)
 
-        if normalization == "lineal":
+        if normalization == "linear":
             data.train.x, data.test.x = self._normalize_zero_to_one(data.train.x, data.test.x)
         
         if normalization == "exponential":
             data.train.x, data.test.x = self._normalize_exponential(data.train.x, data.test.x)
 
-        if normalization == "powed":
+        if normalization == "power":
             data.train.x, data.test.x = self._normalize_power(data.train.x, data.test.x)
         
         if 0 < pca_components < 1:
@@ -282,7 +282,8 @@ class IndoorLocGraphData:
         """Constructs a K-Nearest Neighbors graph."""
         if k is not None and k > 0:
             X = graph_data.x.cpu().numpy()
-            knn_graph = kneighbors_graph(X, n_neighbors=k, metric=metric, mode='distance', include_self=True)
+            knn_graph = kneighbors_graph(X, n_neighbors=k, metric=metric,
+             mode='distance', include_self=False)
             knn_graph_coo = knn_graph.tocoo()
             edge_index = torch.from_numpy(
                 np.stack([knn_graph_coo.row, knn_graph_coo.col])
