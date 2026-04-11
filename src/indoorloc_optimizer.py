@@ -47,21 +47,26 @@ class GNNRegressionOptimizer:
             }
             return params
     
-    def _objective(self, trial, data, model_class, max_epochs, patience):
+    def _objective(self, trial, data, model_class, task, max_epochs, patience):
         params = self._set_gridparams(trial, data, model_class)
         model = model_class(**params).to(self.device)
-        trainer = iltrainer.GNNRegressionTrainer()
+        
+        if task == "regression":
+            trainer = iltrainer.GNNRegressionTrainer()
+        if task == "classification":
+            trainer = iltrainer.GNNClassificationTrainer()
 
-        mae = trainer.train_validate(
+        loss = trainer.train_validate(
             data, model, max_epochs, patience, verbose=0, trial=trial
         )
         
-        return mae
+        return loss
 
     def run_optuna_study(
             self,
             data: torch_geometric.data.Data, 
             model_class: type, 
+            task,
             study_name,
             direction,
             storage,    
@@ -86,7 +91,7 @@ class GNNRegressionOptimizer:
         )
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study.optimize(
-            lambda trial: self._objective(trial, data, model_class, max_epochs, patience),
+            lambda trial: self._objective(trial, data, model_class, task, max_epochs, patience),
             n_trials=n_trials,
             n_jobs=1,
             callbacks=callbacks)
