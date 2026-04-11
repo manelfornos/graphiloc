@@ -33,7 +33,7 @@ class GNNRegressionOptimizer:
             for i in range(n_layers):
                 gnn_hidden_dims.append(trial.suggest_categorical(f'gnn_hidden_dim_layer_{i}', [128, 256]))
                 if i < n_layers - 1:
-                    gnn_dropouts.append(trial.suggest_float(f'gnn_dropout_layer_{i}', 0.1, 0.5))
+                    gnn_dropouts.append(trial.suggest_float(f'gnn_dropout_layer_{i}', 0.1, 0.6, step=0.1))
 
             params = {
                 'input_dim': d.num_features,
@@ -41,8 +41,8 @@ class GNNRegressionOptimizer:
                 'gnn_hidden_dims': gnn_hidden_dims,
                 'gnn_dropouts': gnn_dropouts,
                 'mlp_layers': trial.suggest_categorical('mlp_layers', [2, 4]),
-                'learning_rate': trial.suggest_float('learning_rate', 1e-3, 1e-1, log=True),
-                'weight_decay': trial.suggest_float('weight_decay', 1e-6, 1e-3, log=True),
+                'learning_rate': trial.suggest_float('learning_rate', 1e-3, 1e-2, log=True),
+                'weight_decay': trial.suggest_float('weight_decay', 1e-5, 1e-3, log=True),
                 'lr_factor': 0.9,
             }
             return params
@@ -77,11 +77,11 @@ class GNNRegressionOptimizer:
             direction=direction,
             storage=storage,
             load_if_exists=load_if_exists,
-            pruner=optuna.pruners.MedianPruner(n_startup_trials=10, 
-                                               n_warmup_steps=200,
-                                               n_min_trials=10),
+            pruner=optuna.pruners.MedianPruner(n_startup_trials=5, 
+                                               n_warmup_steps=500,
+                                               n_min_trials=5),
             sampler=optuna.samplers.TPESampler(seed=SEED,
-                n_startup_trials=20
+                n_startup_trials=10
             )
         )
         optuna.logging.set_verbosity(optuna.logging.WARNING)
