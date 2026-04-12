@@ -98,7 +98,7 @@ class SAGEClassifier(nn.Module):
             model_layers.append(GraphNorm(gnn_hidden_dims[i]))  
             model_layers.append(LeakyReLU())
 
-            if i < n_layers - 1:  
+            if i < gnn_layers - 1:  
                 model_layers.append(Dropout(p=gnn_dropouts[i]))
             current_dim = gnn_hidden_dims[i]
         
