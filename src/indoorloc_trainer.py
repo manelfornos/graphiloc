@@ -462,9 +462,9 @@ def get_num_classes(data, scheme, task):
 def print_cls_epoch_summary(epoch, train_loss, train_accuracy, 
                             validation_loss, validation_accuracy):
     print(f"Epoch {epoch:02d} => "
-          f"Train Loss: {train_loss:.4f}, "
+          f"Train Loss: {train_loss:.2e}, "
           f"Train Acc.: {100*train_accuracy:.2f}% | "
-          f"Validation Loss: {validation_loss:.4f}, " 
+          f"Validation Loss: {validation_loss:.2e}, " 
           f"Validation Acc.: {100*validation_accuracy:.2f}%")
 
 def print_reg_epoch_summary(epoch, train_loss, validation_loss):
