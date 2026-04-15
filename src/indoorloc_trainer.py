@@ -2,10 +2,14 @@ import os
 import time
 from datetime import datetime
 import pandas as pd
+import numpy as np
+import json
 import torch
 import torch.nn as nn
 import torch_geometric
 import optuna
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_score
 
 import indoorloc_viz as ilviz
 import indoorloc_enums as ilenums
@@ -408,36 +412,60 @@ class GNNClassificationTrainer:
         end = time.perf_counter()
         elapsed_time = end - start  
 
+        cm = confusion_matrix(targets.cpu().numpy(), predictions.cpu().numpy())
+        precision = precision_score(
+            targets.cpu().numpy(),
+            predictions.cpu().numpy(),
+            average='macro',
+            zero_division=0
+        )
+        oce = torch.abs(predictions - targets).float().mean().item()
+
         return {
             'accuracy': accuracy,
-            'predictions': predictions.cpu().numpy(),
-            'targets': targets.cpu().numpy(),
+            'precision': precision,
+            'oce':oce,
+            'cm': cm,
             METRICS_ELAPSED_TIME: elapsed_time
         }
         
 
-def summarize_predictions(predictions, graph_params, model_params, 
+def summarize_predictions(outputs, graph_params, model_params, 
                           task=TASKS_REG, output_csv=None):
     
     if task == TASKS_REG:
         metrics = ['mpe', 'mae', 'mae_x', 'mae_y', 'elapsed_time']
     else:
-        metrics = ['accuracy', 'elapsed_time']
+        metrics = ['accuracy', 'precision', 'oce', 'elapsed_time']
 
-    if len(predictions) == 0:
-        raise ValueError("Predictions list is empty.")
+    if len(outputs) == 0:
+        raise ValueError("Outputs list is empty.")
 
     summary_data = {}
     summary_data['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     for m in metrics:
-        if m not in predictions[0]:
+        if m not in outputs[0]:
             raise KeyError(f"The metric '{m}' is not found.")
-        values = [p[m] for p in predictions]
+        values = [p[m] for p in outputs]
         summary_data[f"{m}_mean"] = round(pd.Series(values).mean(), 4)
         summary_data[f"{m}_std"] = round(pd.Series(values).std(), 4)
 
     summary_df = pd.DataFrame([summary_data])
 
+    cms = [np.asarray(p['cm']) for p in outputs]
+
+    max_rows = max(cm.shape[0] for cm in cms)
+    max_cols = max(cm.shape[1] for cm in cms)
+
+    aligned = []
+    for cm in cms:
+        padded = np.zeros((max_rows, max_cols), dtype=cm.dtype)
+        padded[:cm.shape[0], :cm.shape[1]] = cm
+        aligned.append(padded)
+
+    summary_data['cm'] = np.sum(aligned, axis=0)
+    cm = np.array(summary_data['cm'])
+    summary_data['cm'] = json.dumps(cm.tolist(), separators=(',', ':'))
     summary_data['graph_params'] = str(graph_params)
     summary_data['model_params'] = str(model_params)
 
