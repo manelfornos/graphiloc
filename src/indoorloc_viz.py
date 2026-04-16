@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import plotly.graph_objects as go
 from collections import Counter
+import matplotlib as mpl
 from matplotlib.ticker import MaxNLocator
 from matplotlib.ticker import ScalarFormatter
 from matplotlib.collections import PolyCollection
@@ -945,115 +946,75 @@ def plot_time_by_k(ks, datasets, save_path=None):
     
     plt.show()
 
-def plot_computational_scaling(df, save_path=None):
-    """
-    Genera el gràfic amb la regressió lineal del temps d'inferencia en funció de N*F,
-    per a cada arquitectura, i també la recta teòrica del cost computacional per k-NN.
-    """
-    
-    model_col='Model'
-    models=['GCN', 'GAT', 'SAGE'] 
-    
-    plt.figure(figsize=(11, 7))
-    
-    colors = {
-        'GCN': sns.color_palette("Set2")[0],
-        'GAT': sns.color_palette("Set2")[1],
-        'SAGE': sns.color_palette("Set2")[2]
-    }
-    
-    pastel_colors = {
-        'GCN': sns.color_palette("Set2")[0],
-        'GAT': sns.color_palette("Set2")[1],
-        'SAGE': sns.color_palette("Set2")[2]
-    }
-    
-    markers = {
-        'GCN': 'o',
-        'GAT': 's',
-        'SAGE': 'D'
-    }
-    
-    results = []
-    
-    for model in models:
-        df_m = df[df[model_col] == model]
-        
-        complexity = df_m['Nodes'] * df_m['Característiques']
-        time = df_m['t (test)']
-        
-        slope, intercept, r_value, _, _ = stats.linregress(
-            np.log10(complexity),
-            np.log10(time)
-        )
-        
-        results.append({
-            'Model': model,
-            'Exponent': slope,
-            'R²': r_value**2
-        })
-        
-        plt.scatter(
-            complexity, time,
-            color=colors[model],
-            label=model,
-            marker=markers[model],
-            alpha=0.7,
-            s=100,
-            zorder=3
-        )
-        
-        x_fit = np.logspace(
-            np.log10(complexity.min()),
-            np.log10(complexity.max()),
-            100
-        )
-        y_fit = 10**intercept * x_fit**slope
-        
-        plt.plot(
-            x_fit, y_fit,
-            color=pastel_colors[model],
-            linestyle='--',
-            linewidth=2.5,
-            alpha=0.7,
-            zorder=2
-        )
-    
-    complexity_range = np.logspace(
-        np.log10((df['Nodes'] * df['Característiques']).min()),
-        np.log10((df['Nodes'] * df['Característiques']).max()),
-        100
-    )
-    
-    mean_time = df['t (test)'].mean()
-    mean_degree = (df['Característiques'] / df['Nodes']).mean()
-    k_knn = mean_time / (complexity_range.mean() / mean_degree)
-    time_knn = k_knn * (complexity_range / mean_degree)
-    
-    plt.plot(
-        complexity_range, time_knn,
-        color='black',
-        linestyle='-',
-        lw=2.5,
-        label='k-NN O(N·F)',
-        alpha=0.6,
-        zorder=1
-    )
-    
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.xlabel(r'$N \cdot F$', fontsize=13)
-    plt.ylabel(r"Temps d'inferència (s)", fontsize=13)
-    plt.legend(fontsize=9, loc='upper left')
-    plt.grid(True, linestyle='--', alpha=0.4)
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, format="svg")
-    
+def plot_computational_scaling(df):
+    # IEEE style config
+    plt.rcParams.update({
+        'font.family':      'serif',
+        'font.size':         8,
+        'axes.labelsize':    8,
+        'axes.titlesize':    8,
+        'xtick.labelsize':   7,
+        'ytick.labelsize':   7,
+        'legend.fontsize':   7,
+        'lines.linewidth':   1.0,
+        'axes.linewidth':    0.5,
+        'xtick.major.width': 0.5,
+        'ytick.major.width': 0.5,
+        'pdf.fonttype':      42,  
+        'ps.fonttype':       42,
+    })
+
+    NF = df['Nodes'] * df['Features']
+    t_gnn = df['t (test)']
+
+    log_nf = np.log10(NF)
+    log_t = np.log10(t_gnn)
+    slope, intercept, r_value, _, _ = stats.linregress(log_nf, log_t)
+
+    nf0 = NF.min()
+    t0 = 10**intercept * nf0**slope
+
+    x_fit = np.logspace(np.log10(nf0), np.log10(NF.max()), 300)
+    y_gnn = t0 * (x_fit / nf0)**slope
+    y_knn = t0 * (x_fit / nf0)**1.0
+
+    mm = 1 / 25.4
+    fig, ax = plt.subplots(figsize=(88*mm, 66*mm))  # ratio 4:3
+
+    # Plots
+    ax.scatter(NF, t_gnn,
+               s=8, color='black', marker='o', zorder=3,
+               label='GNN (measured)')
+
+    ax.plot(x_fit, y_knn,
+            color='black', lw=1.0, linestyle='-',
+            label=r'$k$-NN, $\alpha=1.00$')
+
+    ax.plot(x_fit, y_gnn,
+            color='black', lw=1.0, linestyle='--',
+            label=rf'GNN, $\alpha={slope:.2f}$, $R^2={r_value**2:.3f}$')
+
+    # Axes
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel(r'$N \cdot F$')
+    ax.set_ylabel('Inference time (ms)')
+    ax.grid(True, which='both', linestyle=':', linewidth=0.4, alpha=0.6)
+
+    # Legend
+    ax.legend(loc='upper left', frameon=False)
+
+    fig.tight_layout(pad=0.5)
+
+    # Export plot
+    fig.savefig('scaling.pdf', dpi=300, bbox_inches='tight')
+    fig.savefig('scaling.svg', dpi=300, bbox_inches='tight')
     plt.show()
-    
-    return pd.DataFrame(results)
+
+    return {
+        'gnn_slope': round(slope, 4),
+        'gnn_r2':    round(r_value**2, 4),
+    }
 
 def count_param(configs, ids, param):
     return Counter([configs[i][param] for i in ids])
