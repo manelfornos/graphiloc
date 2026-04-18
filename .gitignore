@@ -211,3 +211,6 @@ models/
 results/
 *.db
 *.pt
+
+notebooks/*.pdf
+notebooks/*.svg
