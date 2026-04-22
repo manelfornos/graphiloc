@@ -452,20 +452,22 @@ def summarize_predictions(outputs, graph_params, model_params,
 
     summary_df = pd.DataFrame([summary_data])
 
-    cms = [np.asarray(p['cm']) for p in outputs]
+    if task == TASKS_CLS:
+        cms = [np.asarray(p['cm']) for p in outputs]
 
-    max_rows = max(cm.shape[0] for cm in cms)
-    max_cols = max(cm.shape[1] for cm in cms)
+        max_rows = max(cm.shape[0] for cm in cms)
+        max_cols = max(cm.shape[1] for cm in cms)
 
-    aligned = []
-    for cm in cms:
-        padded = np.zeros((max_rows, max_cols), dtype=cm.dtype)
-        padded[:cm.shape[0], :cm.shape[1]] = cm
-        aligned.append(padded)
+        aligned = []
+        for cm in cms:
+            padded = np.zeros((max_rows, max_cols), dtype=cm.dtype)
+            padded[:cm.shape[0], :cm.shape[1]] = cm
+            aligned.append(padded)
 
-    summary_data['cm'] = np.sum(aligned, axis=0)
-    cm = np.array(summary_data['cm'])
-    summary_data['cm'] = json.dumps(cm.tolist(), separators=(',', ':'))
+        summary_data['cm'] = np.sum(aligned, axis=0)
+        cm = np.array(summary_data['cm'])
+        summary_data['cm'] = json.dumps(cm.tolist(), separators=(',', ':'))
+
     summary_data['graph_params'] = str(graph_params)
     summary_data['model_params'] = str(model_params)
 
