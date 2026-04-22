@@ -8,9 +8,9 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.neighbors import kneighbors_graph
 import torch
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 from torch_geometric.data import Data
 from torch_geometric.utils import to_undirected
-
 import indoorloc_enums as ilenums
 
 # Constants
@@ -293,14 +293,28 @@ class IndoorLocGraphData:
             graph_data.k = k
         return graph_data
     
-    def create_nodes(self, graph_data, dataset, val_size=0.1, n_split=0):
+    def stratifiedKFold(self, dataset, n_splits, split_id):
+        skf = MultilabelStratifiedKFold(n_splits=n_splits, shuffle=False)
+
+        X = dataset.train.x
+        y = dataset.train.y
+
+        train_idx, val_idx = list(skf.split(X, y))[split_id]
+
+        X_train = X.iloc[train_idx]
+        y_train = y.iloc[train_idx]
+
+        X_val = X.iloc[val_idx]
+        y_val = y.iloc[val_idx]
+
+        return X_train, y_train, X_val, y_val
+
+    def create_nodes(self, graph_data, dataset, n_splits, split_id):
         """Creates node features."""
 
         dataset = self._assign_nodeid(dataset)
 
-        X_train, X_val, y_train, y_val = train_test_split(
-            dataset.train.x, dataset.train.y, test_size=val_size, random_state=SEED + n_split
-        )
+        X_train, y_train, X_val, y_val = self.stratifiedKFold(dataset, n_splits, split_id)
 
         graph_data.num_nodes = sum(len(df) for df in [X_train, X_val, dataset.test.x])
 
@@ -308,7 +322,6 @@ class IndoorLocGraphData:
         graph_data.train_mask = self._create_tensor_mask(X_train, graph_data.num_nodes)
         graph_data.test_mask = self._create_tensor_mask(dataset.test.x, graph_data.num_nodes)
 
-        graph_data.val_size = val_size
 
         x_concat = pd.concat([dataset.train.x, dataset.test.x]).sort_values("nodeid")   
         graph_data.x = torch.tensor(x_concat[dataset.features].values, dtype=torch.float)
@@ -351,12 +364,12 @@ class IndoorLocGraphData:
 
         return graph_data.to(self.device)
 
-    def create_transductive_graph(self, dataset, val_size, graph_params, n_split):
+    def create_transductive_graph(self, dataset, graph_params, n_splits, split_id):
         graph_data_loader = IndoorLocGraphDataLoader()
         tasks = [TASKS_CLS, TASKS_REG]
 
         graph_data = Data()
-        graph_data, y_train, y_val = self.create_nodes(graph_data, dataset, val_size, n_split)
+        graph_data, y_train, y_val = self.create_nodes(graph_data, dataset, n_splits, split_id)
         graph_data = self.create_edges(graph_data, graph_params)
 
         for task in tasks:
@@ -380,15 +393,17 @@ class IndoorLocGraphData:
 
         return graph_data_loader
 
-    def create_inductive_graphs(self, dataset, val_size, graph_params, n_split):
+    def create_inductive_graphs(self, dataset, graph_params, n_splits, split_id):
         graph_data_loader = IndoorLocGraphDataLoader()
         tasks = [TASKS_CLS, TASKS_REG]
 
         dataset = self._assign_nodeid(dataset)
 
-        X_train, X_val, y_train, y_val = train_test_split(
-            dataset.train.x, dataset.train.y, test_size=val_size, random_state=SEED + n_split
-        )
+        # X_train, X_val, y_train, y_val = train_test_split(
+        #     dataset.train.x, dataset.train.y, test_size=val_size, random_state=SEED + n_split
+        # )
+
+        X_train, y_train, X_val, y_val = self.stratifiedKFold(dataset, n_splits, split_id)
 
         splits = {
             "train": (X_train, y_train),
@@ -449,13 +464,13 @@ class IndoorLocGraphData:
 
         return graph_data_loader
 
-    def create_data_loader(self, dataset, val_size, graph_params, n_split=0):
+    def create_data_loader(self, dataset, graph_params, n_splits, split_id):
         """Generates graph data loaders for classification and regression tasks."""
 
         if graph_params["scheme"] == 'transductive':
-            graph_data_loader = self.create_transductive_graph(dataset, val_size, graph_params, n_split)
+            graph_data_loader = self.create_transductive_graph(dataset, graph_params, n_splits, split_id)
         elif graph_params["scheme"] == 'inductive':
-            graph_data_loader = self.create_inductive_graphs(dataset, val_size, graph_params, n_split)
+            graph_data_loader = self.create_inductive_graphs(dataset, graph_params, n_splits, split_id)
         else:
             raise ValueError("Graph scheme must be transductive or inductive!")
         return graph_data_loader
