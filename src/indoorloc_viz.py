@@ -20,6 +20,7 @@ import statsmodels.api as sm
 import networkx as nx
 import torch
 from torch_geometric.utils.convert import to_networkx
+from matplotlib.ticker import LogLocator
 
 from indoorloc_enums import (
     Devices,
@@ -962,6 +963,14 @@ def plot_computational_scaling(df):
         'ytick.major.width': 0.5,
         'pdf.fonttype':      42,  
         'ps.fonttype':       42,
+        'xtick.major.size':  3.5,
+        'ytick.major.size':  3.5,
+        'xtick.minor.size':  2.0,
+        'ytick.minor.size':  2.0,
+        'xtick.major.width': 0.6,
+        'ytick.major.width': 0.6,
+        'xtick.direction':   'in',  
+        'ytick.direction':   'in',
     })
 
     NF = df['Nodes'] * df['Features']
@@ -980,20 +989,21 @@ def plot_computational_scaling(df):
 
     mm = 1 / 25.4
     fig, ax = plt.subplots(figsize=(88*mm, 66*mm))  # ratio 4:3
-
+    ax.xaxis.set_minor_locator(LogLocator(subs='all'))
+    ax.yaxis.set_minor_locator(LogLocator(subs='all'))
     # Plots
     ax.scatter(NF, t_gnn,
-               s=8, color='black', marker='o', zorder=3,
-               label='GNN (measured)')
+               s=8, color='red', marker='o', zorder=3, edgecolors='black',  linewidths=0.2,
+               label='GNN (our model)')
 
-    ax.plot(x_fit, y_knn,
-            color='black', lw=1.0, linestyle='-',
-            label=r'$k$-NN, $\alpha=1.00$')
 
     ax.plot(x_fit, y_gnn,
             color='black', lw=1.0, linestyle='--',
-            label=rf'GNN, $\alpha={slope:.2f}$, $R^2={r_value**2:.3f}$')
+            label=rf'GNN Fit, $\alpha={slope:.2f}$, $R^2={r_value**2:.3f}$')
 
+    ax.plot(x_fit, y_knn,
+            color='black', lw=1.0, linestyle='-',
+            label=r'$k$-NN Fit, $\alpha=1.00$')
     # Axes
     ax.set_xscale('log')
     ax.set_yscale('log')
