@@ -8,7 +8,8 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.neighbors import kneighbors_graph
 import torch
-from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
+from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from torch_geometric.data import Data
 from torch_geometric.utils import to_undirected
 import indoorloc_enums as ilenums
@@ -294,7 +295,7 @@ class IndoorLocGraphData:
         return graph_data
     
     def stratifiedKFold(self, dataset, n_splits, split_id):
-        skf = MultilabelStratifiedKFold(n_splits=n_splits, shuffle=False)
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=False)
 
         X = dataset.train.x
         y = dataset.train.y
@@ -399,16 +400,42 @@ class IndoorLocGraphData:
 
         dataset = self._assign_nodeid(dataset)
 
-        # X_train, X_val, y_train, y_val = train_test_split(
-        #     dataset.train.x, dataset.train.y, test_size=val_size, random_state=SEED + n_split
-        # )
+        X = dataset.train.x
+        y_reg = dataset.train.y[[TARGETS_LONGITUDE, TARGETS_LATITUDE]]
+        y_cls = dataset.train.y[TARGETS_BUILDING_FLOOR]
 
-        X_train, y_train, X_val, y_val = self.stratifiedKFold(dataset, n_splits, split_id)
+        # -------------------------
+        # KFold for regression
+        # -------------------------
+        kf = KFold(n_splits=n_splits, shuffle=True, random_state=SEED)
+        reg_splits = list(kf.split(X))
+
+        train_idx_reg, val_idx_reg = reg_splits[split_id]
+
+        # -------------------------
+        # StratifiedKFold for classification
+        # -------------------------
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=SEED)
+        cls_splits = list(skf.split(X, y_cls))
+
+        train_idx_cls, val_idx_cls = cls_splits[split_id]
+
+        train_idx = train_idx_reg
+        val_idx = val_idx_reg
+
+        X_train = X.iloc[train_idx]
+        X_val = X.iloc[val_idx]
+
+        y_train_reg = y_reg.iloc[train_idx]
+        y_val_reg = y_reg.iloc[val_idx]
+
+        y_train_cls = y_cls.iloc[train_idx]
+        y_val_cls = y_cls.iloc[val_idx]
 
         splits = {
-            "train": (X_train, y_train),
-            "val": (X_val, y_val),
-            "test": (dataset.test.x, dataset.test.y),
+            "train": (X_train, (y_train_reg, y_train_cls)),
+            "val": (X_val, (y_val_reg, y_val_cls)),
+            "test": (dataset.test.x, (dataset.test.y[[TARGETS_LONGITUDE, TARGETS_LATITUDE]], dataset.test.y[TARGETS_BUILDING_FLOOR])),
         }
 
         def _build_split_graph(x_df):
@@ -419,22 +446,25 @@ class IndoorLocGraphData:
             gdata.num_features = len(dataset.features)
             return self.create_edges(gdata, graph_params)
 
-        def _assign_split_labels(gdata, y_df, task, fit_scaler=False):
+        def _assign_split_labels(gdata, y_reg, y_cls, task, fit_scaler=False):
+
             if task == TASKS_REG:
                 coords = np.column_stack((
-                    y_df[TARGETS_LONGITUDE].values,
-                    y_df[TARGETS_LATITUDE].values
+                    y_reg[TARGETS_LONGITUDE].values,
+                    y_reg[TARGETS_LATITUDE].values
                 ))
+
                 if fit_scaler:
                     self.y_scaler.fit(coords)
+
                 coords = self.y_scaler.transform(coords)
                 gdata.y = torch.tensor(coords, dtype=torch.float)
                 gdata.y_scaler = self.y_scaler
                 gdata.num_classes = 0
 
             if task == TASKS_CLS:
-                gdata.y = torch.tensor(y_df[TARGETS_BUILDING_FLOOR].values, dtype=torch.int64)
-                gdata.num_classes = len(np.unique(gdata.y.numpy()))
+                gdata.y = torch.tensor(y_cls.values, dtype=torch.int64)
+                gdata.num_classes = len(np.unique(y_cls.values))
 
             return gdata
         
@@ -442,17 +472,26 @@ class IndoorLocGraphData:
 
         for task in tasks:
             if task == TASKS_CLS:
-                dataset.target = TARGETS_BUILDING_FLOOR
                 graph_data_loader.cls = {
-                    split: _assign_split_labels(copy.deepcopy(graphs[split]), y, task)
-                    for split, (_, y) in splits.items()
+                    split: _assign_split_labels(
+                        copy.deepcopy(graphs[split]),
+                        y_reg=None,
+                        y_cls=y_cls_split,
+                        task=task
+                    )
+                    for split, (_, (_, y_cls_split)) in splits.items()
                 }
 
             if task == TASKS_REG:
-                dataset.target = [TARGETS_LONGITUDE, TARGETS_LATITUDE]
                 graph_data_loader.reg = {
-                    split: _assign_split_labels(copy.deepcopy(graphs[split]), y, task, fit_scaler=(split == "train"))
-                    for split, (_, y) in splits.items()
+                    split: _assign_split_labels(
+                        copy.deepcopy(graphs[split]),
+                        y_reg=y_reg_split,
+                        y_cls=None,
+                        task=task,
+                        fit_scaler=(split == "train")
+                    )
+                    for split, (_, (y_reg_split, _)) in splits.items()
                 }
 
         graph_data_loader.reg["train"].to(self.device)
