@@ -93,21 +93,22 @@ Results obtained after 10 runs using a random split of the training dataset each
         </tr>
         <tr>
             <th>Dataset</th>
+            <th><a href="https://ieeexplore.ieee.org/document/10332535" target="_blank">Best k-NN<br>(Optimized)</th>
             <th>GraphSAGE<br>(Transductive)</th>
             <th>GraphSAGE<br>(Inductive)</th>
         </tr>
     </thead>
     <tbody >
-        <tr><td><a href="https://ieeexplore.ieee.org/document/7275492" target="_blank">UJI1</td><td>95.28 ± 0.80</td><td>93.13 ± 0.83</td></tr>
-        <tr><td><a href="https://ieeexplore.ieee.org/document/8792196" target="_blank">UTS1</td><td>95.90 ± 0.35</td><td>94.90 ± 0.34</td></tr>
-        <tr><td><a href="https://zenodo.org/records/5174851" target="_blank">TIE1</td><td>6.60 ± 18.48</td><td>5.40 ± 5.50</td></tr>
-        <tr><td><a href="https://zenodo.org/records/5174851" target="_blank">SAH1</td><td>88.40 ± 6.92</td><td>75.83 ± 6.47</td></tr>
-        <tr><td><a href="https://ieeexplore.ieee.org/document/6577256" target="_blank">TUT1</td><td>91.41 ± 0.82</td><td>89.06 ± 1.42</td></tr>
-        <tr><td><a href="https://ieeexplore.ieee.org/document/6577256" target="_blank">TUT2</td><td>92.78 ± 0.92</td><td>94.26 ± 1.85</td></tr>
-        <tr><td><a href="https://www.mdpi.com/2306-5729/2/4/32" target="_blank">TUT3</td><td>93.76 ± 0.34</td><td>94.62 ± 0.26</td></tr>
-        <tr><td><a href="https://www.mdpi.com/2306-5729/2/4/32" target="_blank">TUT4</td><td>95.55 ± 0.42</td><td>94.79 ± 0.48</td></tr>
-        <tr><td><a href="https://zenodo.org/records/1161525" target="_blank">TUT5</td><td>98.70 ± 0.55</td><td>98.52 ± 0.69</td></tr>
-        <tr><td><a href="https://link.springer.com/article/10.1186/s43020-022-00086-y" target="_blank">SOD1</td><td>100.00 ± 0.00</td><td>100.00 ± 0.00</td></tr>
+        <tr><td><a href="https://ieeexplore.ieee.org/document/7275492" target="_blank">UJI1</td><td>76.97 - 92.35</td><td>95.28 ± 0.80</td><td>93.13 ± 0.83</td></tr>
+        <tr><td><a href="https://ieeexplore.ieee.org/document/8792196" target="_blank">UTS1</td><td>67.27 - 93.30</td><td>95.90 ± 0.35</td><td>94.90 ± 0.34</td></tr>
+        <tr><td><a href="https://zenodo.org/records/5174851" target="_blank">TIE1</td><td>0.00 - 2.00</td><td>6.60 ± 18.48</td><td>5.40 ± 5.50</td></tr>
+        <tr><td><a href="https://zenodo.org/records/5174851" target="_blank">SAH1</td><td>51.28 - 46.15</td><td>88.40 ± 6.92</td><td>75.83 ± 6.47</td></tr>
+        <tr><td><a href="https://ieeexplore.ieee.org/document/6577256" target="_blank">TUT1</td><td>69.70 - 95.10</td><td>91.41 ± 0.82</td><td>89.06 ± 1.42</td></tr>
+        <tr><td><a href="https://ieeexplore.ieee.org/document/6577256" target="_blank">TUT2</td><td>55.68 - 87.50</td><td>92.78 ± 0.92</td><td>94.26 ± 1.85</td></tr>
+        <tr><td><a href="https://www.mdpi.com/2306-5729/2/4/32" target="_blank">TUT3</td><td>87.72 - 91.85</td><td>93.76 ± 0.34</td><td>94.62 ± 0.26</td></tr>
+        <tr><td><a href="https://www.mdpi.com/2306-5729/2/4/32" target="_blank">TUT4</td><td>93.83 - 96.56</td><td>95.55 ± 0.42</td><td>94.79 ± 0.48</td></tr>
+        <tr><td><a href="https://zenodo.org/records/1161525" target="_blank">TUT5</td><td>99.49 - 99.49</td><td>98.70 ± 0.55</td><td>98.52 ± 0.69</td></tr>
+        <tr><td><a href="https://link.springer.com/article/10.1186/s43020-022-00086-y" target="_blank">SOD1</td><td>100.00 - 100.00</td><td>100.00 ± 0.00</td><td>100.00 ± 0.00</td></tr>
     </tbody>
 </table>
 
